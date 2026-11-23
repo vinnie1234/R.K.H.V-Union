@@ -29,7 +29,7 @@ class UnionEntity(CoordinatorEntity[UnionHockeyCoordinator], SensorEntity):
 
     _attr_has_entity_name = False
     # The lists are big and change every refresh; they do not belong in the history
-    _unrecorded_attributes = frozenset({"matches", "trainings", "results", "table", "next_match"})
+    _unrecorded_attributes = frozenset({"matches", "last_7_days", "trainings", "results", "table", "next_match"})
 
     def __init__(self, coordinator: UnionHockeyCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator)
@@ -86,7 +86,12 @@ class CancelledSensor(UnionEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"matches": (self.coordinator.data or {}).get("cancelled", [])}
+        data = self.coordinator.data or {}
+        return {
+            "matches": data.get("cancelled", []),
+            "last_7_days": data.get("recent_cancelled", []),
+            "count_last_7_days": len(data.get("recent_cancelled", [])),
+        }
 
 
 class TrainingsSensor(UnionEntity):

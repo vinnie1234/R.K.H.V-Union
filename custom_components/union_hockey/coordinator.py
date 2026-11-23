@@ -10,6 +10,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -33,6 +34,9 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 TRAINING_DAYS = 14
+LOOK_BACK_DAYS = 7      # the cancellations of the last days are shown
+KEEP_DAYS = 14          # remembered cancellations are dropped after this
+STORAGE_VERSION = 1
 RESULTS_LIMIT = 10
 
 
@@ -48,6 +52,9 @@ class UnionHockeyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(minutes=int(options.get(CONF_INTERVAL, DEFAULT_INTERVAL))),
         )
         self.entry = entry
+        # The feeds may drop a cancelled match once its day has passed; every cancellation that is seen is remembered here
+        self._store: Store[dict[str, dict[str, Any]]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.cancelled")
+        self._seen: dict[str, dict[str, Any]] | None = None
         self.days_ahead = int(options.get(CONF_DAYS_AHEAD, DEFAULT_DAYS_AHEAD))
         self.field_types: dict[str, str] = {**DEFAULT_FIELD_TYPES, **options.get(CONF_FIELD_TYPES, {})}
         # [{id, name}] of the tracked teams, and the person that plays in a team: {team id: person entity}
@@ -65,17 +72,21 @@ class UnionHockeyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         today = dt_util.now().date()
         end = today + timedelta(days=self.days_ahead)
         try:
-            matches = await self.api.matches(today, end, self.field_types, tz)
+            matches = await self.api.matches(today - timedelta(days=LOOK_BACK_DAYS), end, self.field_types, tz)
             trainings = await self.api.trainings(today, today + timedelta(days=TRAINING_DAYS), tz)
         except UnionHockeyError as err:
             raise UpdateFailed(str(err)) from err
 
         await self._async_apply_lisa_cancellations(matches)
 
-        now = dt_util.now().isoformat()
-        home = [m for m in matches if m["home"] and (m["start"] or m["date"]) >= now[:10]]
+        today_text = today.isoformat()
+        tracked_ids = {t["id"] for t in self.teams}
+        matters = lambda m: m["home"] or m["team_id"] in tracked_ids  # noqa: E731
+        upcoming = [m for m in matches if m["date"] >= today_text]
+        home = [m for m in upcoming if m["home"]]
+        recent_cancelled = await self._async_remember_cancellations([m for m in matches if m["cancelled"] and matters(m)], today)
 
-        cancelled = [m for m in matches if m["cancelled"] and (m["home"] or m["team_id"] in {t["id"] for t in self.teams})]
+        cancelled = [m for m in upcoming if m["cancelled"] and matters(m)]
 
         teams: dict[str, dict[str, Any]] = {}
         for team in self.teams:
@@ -99,12 +110,33 @@ class UnionHockeyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "standing": standing,
                 "results": results,
             }
-        return {"home": home, "cancelled": cancelled, "trainings": trainings, "teams": teams}
+        return {"home": home, "cancelled": cancelled, "recent_cancelled": recent_cancelled, "trainings": trainings, "teams": teams}
+
+    async def _async_remember_cancellations(self, seen_now: list[dict[str, Any]], today) -> list[dict[str, Any]]:
+        """Remember the cancellations that are seen and return those of the last days (today included), newest first."""
+        if self._seen is None:
+            self._seen = await self._store.async_load() or {}
+        changed = False
+        for match in seen_now:
+            key = f"{match['date']}|{match['team_id']}|{(match['opponent'] or '').lower()}"
+            if self._seen.get(key) != match:
+                self._seen[key] = match
+                changed = True
+        limit = (today - timedelta(days=KEEP_DAYS)).isoformat()
+        for key in [k for k, m in self._seen.items() if m["date"] < limit]:
+            del self._seen[key]
+            changed = True
+        if changed:
+            await self._store.async_save(self._seen)
+        first, last = (today - timedelta(days=LOOK_BACK_DAYS)).isoformat(), today.isoformat()
+        recent = [m for m in self._seen.values() if first <= m["date"] <= last]
+        return sorted(recent, key=lambda m: (m["date"], m["time"] or ""), reverse=True)
 
     async def _async_apply_lisa_cancellations(self, matches: list[dict[str, Any]]) -> None:
         """The website's schedule lags behind Lisa. Lisa is asked per team (home matches and followed teams) and wins when it says cancelled."""
         tracked = {team["id"] for team in self.teams}
-        team_ids = {m["team_id"] for m in matches if m["team_id"] and (m["home"] or m["team_id"] in tracked)}
+        today = dt_util.now().date().isoformat()
+        team_ids = {m["team_id"] for m in matches if m["team_id"] and m["date"] >= today and (m["home"] or m["team_id"] in tracked)}
         gate = asyncio.Semaphore(4)
 
         async def fetch(team_id: str) -> tuple[str, list[dict[str, Any]] | None]:
@@ -116,7 +148,7 @@ class UnionHockeyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     return team_id, None
 
         rounds = dict(await asyncio.gather(*(fetch(team_id) for team_id in team_ids)))
-        for match in matches:
+        for match in (m for m in matches if m["date"] >= today):
             rows = rounds.get(match["team_id"])
             match["lisa_checked"] = rows is not None
             if not rows:
