@@ -98,7 +98,7 @@ class UnionHockeyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("No standing for %s: %s", team["name"], err)
                 standing = None
             try:
-                results = await self.api.results(team_id, RESULTS_LIMIT)
+                results = await self.api.results(team_id, (standing or {}).get("team_name"), RESULTS_LIMIT)
             except UnionHockeyError as err:
                 _LOGGER.debug("No results for %s: %s", team["name"], err)
                 results = []

@@ -147,6 +147,7 @@ class UnionHockeyApi:
             if row.get("is_current"):
                 table = sorted(rows, key=lambda r: r.get("position") or 99)
                 return {
+                    "team_name": row.get("name"),
                     "poule": row.get("poule_name"),
                     "position": row.get("position"),
                     "played": row.get("number_of_matches"),
@@ -170,42 +171,32 @@ class UnionHockeyApi:
                 }
         return None
 
-    async def results(self, team_id: str, limit: int = 10) -> list[dict[str, Any]]:
-        """The latest results of the team, newest first."""
+    async def results(self, team_id: str, team_name: str | None, limit: int = 10) -> list[dict[str, Any]]:
+        """The latest results of the team itself, newest first. Lisa returns the results of the whole poule, so only the rows of this team are kept
+        (found by the name Lisa uses for the team, for example "Union D2-O"; the ids of Lisa differ from the ids of the club's team list)."""
+        if not team_name:
+            return []
         data = await self._get(f"{LISA_URL.format(club=self._club_id)}/teams/{team_id}/match_results", self._lisa_headers)
         rows = sorted(data.get("match_results", []), key=lambda r: r.get("date") or "", reverse=True)
-        return [
-            {
-                "date": (row.get("date") or "")[:10],
-                "home_team": row.get("home_team_name"),
-                "away_team": row.get("opponent_team_name"),
-                "score_home": row.get("home_score"),
-                "score_away": row.get("away_score"),
-            }
-            for row in rows[:limit]
-        ]
-
-    async def team_round(self, team_id: str) -> list[dict[str, Any]]:
-        """The upcoming matches of one team straight from Lisa, with whether each is cancelled. Only the matches of the team itself."""
-        data = await self._get(f"{LISA_URL.format(club=self._club_id)}/teams/{team_id}/matches_upcoming_round", self._lisa_headers)
-        rows = []
-        for item in data.get("matches_upcoming_round", []):
-            home = bool(item.get("home_team_is_current"))
-            if not (home or item.get("away_team_is_current")):
+        mine = []
+        for row in rows:
+            home = row.get("home_team_name") == team_name
+            if not (home or row.get("opponent_team_name") == team_name):
                 continue
-            day = _parse_day(item.get("date"))
-            if day is None:
-                continue
-            rows.append(
+            own, other = (row.get("home_score"), row.get("away_score")) if home else (row.get("away_score"), row.get("home_score"))
+            outcome = None if own is None or other is None else "W" if own > other else "L" if own < other else "D"
+            mine.append(
                 {
-                    "date": day.isoformat(),
-                    "time": item.get("time"),
+                    "date": (row.get("date") or "")[:10],
+                    "home_team": row.get("home_team_name"),
+                    "away_team": row.get("opponent_team_name"),
+                    "score_home": row.get("home_score"),
+                    "score_away": row.get("away_score"),
                     "home": home,
-                    "opponent": item.get("away_team_name") if home else item.get("home_team_name"),
-                    "cancelled": bool(item.get("is_cancelled")),
+                    "outcome": outcome,
                 }
             )
-        return rows
+        return mine[:limit]
 
     # ---- matches
 
