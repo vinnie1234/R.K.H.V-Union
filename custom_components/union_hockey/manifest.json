@@ -1,6 +1,9 @@
 {
   "domain": "union_hockey",
   "name": "R.K.H.V. Union Hockey",
+  "categories": [
+    "local_services"
+  ],
   "codeowners": [
     "@vinnie1234"
   ],
