@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 import logging
 from typing import Any
@@ -69,8 +70,12 @@ class UnionHockeyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except UnionHockeyError as err:
             raise UpdateFailed(str(err)) from err
 
+        await self._async_apply_lisa_cancellations(matches)
+
         now = dt_util.now().isoformat()
         home = [m for m in matches if m["home"] and (m["start"] or m["date"]) >= now[:10]]
+
+        cancelled = [m for m in matches if m["cancelled"] and (m["home"] or m["team_id"] in {t["id"] for t in self.teams})]
 
         teams: dict[str, dict[str, Any]] = {}
         for team in self.teams:
@@ -94,4 +99,35 @@ class UnionHockeyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "standing": standing,
                 "results": results,
             }
-        return {"home": home, "trainings": trainings, "teams": teams}
+        return {"home": home, "cancelled": cancelled, "trainings": trainings, "teams": teams}
+
+    async def _async_apply_lisa_cancellations(self, matches: list[dict[str, Any]]) -> None:
+        """The website's schedule lags behind Lisa. Lisa is asked per team (home matches and followed teams) and wins when it says cancelled."""
+        tracked = {team["id"] for team in self.teams}
+        team_ids = {m["team_id"] for m in matches if m["team_id"] and (m["home"] or m["team_id"] in tracked)}
+        gate = asyncio.Semaphore(4)
+
+        async def fetch(team_id: str) -> tuple[str, list[dict[str, Any]] | None]:
+            async with gate:
+                try:
+                    return team_id, await self.api.team_round(team_id)
+                except UnionHockeyError as err:
+                    _LOGGER.debug("No round from Lisa for %s: %s", team_id, err)
+                    return team_id, None
+
+        rounds = dict(await asyncio.gather(*(fetch(team_id) for team_id in team_ids)))
+        for match in matches:
+            rows = rounds.get(match["team_id"])
+            match["lisa_checked"] = rows is not None
+            if not rows:
+                continue
+            opponent = (match["opponent"] or "").strip().lower()
+            same_day = [row for row in rows if row["date"] == match["date"]]
+            # By opponent; the names of two Union teams playing each other differ between the schedule and Lisa, so then the only match of that day counts
+            row = next((r for r in same_day if (r["opponent"] or "").strip().lower() == opponent), None)
+            if row is None:
+                same_side = [r for r in same_day if r["home"] == match["home"]]
+                row = same_side[0] if len(same_side) == 1 else None
+            if row and row["cancelled"] and not match["cancelled"]:
+                match["cancelled"] = True
+                match["cancelled_source"] = "lisa"

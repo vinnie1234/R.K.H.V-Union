@@ -56,6 +56,9 @@ def normalize_match(raw: dict[str, Any], field_types: dict[str, str], tz) -> dic
     day = _parse_day(raw.get("date"))
     if day is None or not raw.get("code"):
         return None
+    # Teams of last season (z-...) and bookings are no matches
+    if str(raw.get("home_team_name") or "").lower().startswith("z-") or str(raw.get("away_team_name") or "").lower().startswith("z-"):
+        return None
     time_text = raw.get("time") or None
     start = None
     if time_text:
@@ -181,6 +184,28 @@ class UnionHockeyApi:
             }
             for row in rows[:limit]
         ]
+
+    async def team_round(self, team_id: str) -> list[dict[str, Any]]:
+        """The upcoming matches of one team straight from Lisa, with whether each is cancelled. Only the matches of the team itself."""
+        data = await self._get(f"{LISA_URL.format(club=self._club_id)}/teams/{team_id}/matches_upcoming_round", self._lisa_headers)
+        rows = []
+        for item in data.get("matches_upcoming_round", []):
+            home = bool(item.get("home_team_is_current"))
+            if not (home or item.get("away_team_is_current")):
+                continue
+            day = _parse_day(item.get("date"))
+            if day is None:
+                continue
+            rows.append(
+                {
+                    "date": day.isoformat(),
+                    "time": item.get("time"),
+                    "home": home,
+                    "opponent": item.get("away_team_name") if home else item.get("home_team_name"),
+                    "cancelled": bool(item.get("is_cancelled")),
+                }
+            )
+        return rows
 
     # ---- matches
 

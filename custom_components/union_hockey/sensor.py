@@ -19,7 +19,7 @@ from .coordinator import UnionHockeyCoordinator
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     coordinator: UnionHockeyCoordinator = entry.runtime_data
-    entities: list[SensorEntity] = [HomeMatchesSensor(coordinator, entry), TrainingsSensor(coordinator, entry)]
+    entities: list[SensorEntity] = [HomeMatchesSensor(coordinator, entry), CancelledSensor(coordinator, entry), TrainingsSensor(coordinator, entry)]
     entities.extend(TeamSensor(coordinator, entry, team["id"], team["name"]) for team in coordinator.teams)
     async_add_entities(entities)
 
@@ -66,6 +66,27 @@ class HomeMatchesSensor(UnionEntity):
             "days_ahead": self.coordinator.days_ahead,
             "field_types": self.coordinator.field_types,
         }
+
+
+class CancelledSensor(UnionEntity):
+    """The cancelled matches of the home matches and the followed teams (from the schedule and from Lisa, whichever knows it first)."""
+
+    _attr_icon = "mdi:calendar-remove"
+    _attr_native_unit_of_measurement = "wedstrijden"
+
+    def __init__(self, coordinator: UnionHockeyCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_name = "Union afgelastingen"
+        self._attr_unique_id = f"{entry.entry_id}_cancelled"
+        self.entity_id = "sensor.union_afgelastingen"
+
+    @property
+    def native_value(self) -> int | None:
+        return len(self.coordinator.data["cancelled"]) if self.coordinator.data else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"matches": (self.coordinator.data or {}).get("cancelled", [])}
 
 
 class TrainingsSensor(UnionEntity):
