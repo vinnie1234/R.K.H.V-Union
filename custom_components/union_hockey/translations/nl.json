@@ -27,10 +27,10 @@
         "data": {
           "days_ahead": "Dagen vooruit",
           "interval_min": "Verversen (minuten)",
-          "field_A": "Rabobank-veld (A)",
+          "field_A": "Rabobank-veld (D-veld)",
           "field_B": "B-veld (B)",
           "field_C": "C-veld (C)",
-          "field_D": "Austria veld (D)",
+          "field_D": "Austria veld",
           "teams": "Teams om te volgen"
         }
       },
