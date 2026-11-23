@@ -77,7 +77,11 @@ class UnionHockeyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except UnionHockeyError as err:
             raise UpdateFailed(str(err)) from err
 
-        await self._async_apply_lisa_cancellations(matches)
+        # The check with Lisa is an extra: whatever goes wrong there must never take the schedule down with it
+        try:
+            await self._async_apply_lisa_cancellations(matches)
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Checking the cancellations with Lisa failed, the schedule of the website is used")
 
         today_text = today.isoformat()
         tracked_ids = {t["id"] for t in self.teams}
