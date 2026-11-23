@@ -1,0 +1,54 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "R.K.H.V. Union Hockey",
+        "description": "Leest het wedstrijdschema van unionhockey.nl. De standaardwaarden zijn die van de website zelf.",
+        "data": {
+          "club_id": "Club-id",
+          "api_key": "API-sleutel",
+          "rts_id": "Schema-id"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Het schema van unionhockey.nl kon niet gelezen worden",
+      "no_teams": "De club heeft geen teams"
+    },
+    "abort": {
+      "already_configured": "Deze club is al ingesteld"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Union Hockey",
+        "description": "Kies de teams die je wilt volgen. Een gevolgd team krijgt een eigen sensor met alle wedstrijden, uitslagen, stand en trainingen.",
+        "data": {
+          "days_ahead": "Dagen vooruit",
+          "interval_min": "Verversen (minuten)",
+          "field_A": "Rabobank-veld (A)",
+          "field_B": "B-veld (B)",
+          "field_C": "C-veld (C)",
+          "field_D": "Austria veld (D)",
+          "teams": "Teams om te volgen"
+        }
+      },
+      "persons": {
+        "title": "Wie speelt waar?",
+        "description": "Optioneel: kies de persoon die in een team speelt ({teams}), zodat het dashboard kan laten zien van wie het team is."
+      }
+    },
+    "abort": {
+      "cannot_connect": "Het schema van unionhockey.nl kon niet gelezen worden"
+    }
+  },
+  "selector": {
+    "field_type": {
+      "options": {
+        "water": "Waterveld",
+        "kunstgras": "Kunstgras (zand of semizand)"
+      }
+    }
+  }
+}

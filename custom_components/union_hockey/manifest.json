@@ -1,0 +1,14 @@
+{
+  "domain": "union_hockey",
+  "name": "R.K.H.V. Union Hockey",
+  "codeowners": [
+    "@vinnie1234"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/vinnie1234/R.K.H.V-Union",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/vinnie1234/R.K.H.V-Union/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

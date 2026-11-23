@@ -1,0 +1,54 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "R.K.H.V. Union Hockey",
+        "description": "Reads the match schedule of unionhockey.nl. The defaults are the ones the website itself uses.",
+        "data": {
+          "club_id": "Club id",
+          "api_key": "API key",
+          "rts_id": "Schedule id"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "The schedule of unionhockey.nl could not be read",
+      "no_teams": "The club has no teams"
+    },
+    "abort": {
+      "already_configured": "This club is already set up"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Union Hockey",
+        "description": "Choose the teams you want to follow. A followed team gets its own sensor with all its matches, results, standing and trainings.",
+        "data": {
+          "days_ahead": "Days ahead",
+          "interval_min": "Refresh (minutes)",
+          "field_A": "Rabobank-veld (A)",
+          "field_B": "B-veld (B)",
+          "field_C": "C-veld (C)",
+          "field_D": "Austria veld (D)",
+          "teams": "Teams to follow"
+        }
+      },
+      "persons": {
+        "title": "Who plays where?",
+        "description": "Optional: choose the person that plays in a team ({teams}), so the dashboard can show whose team it is."
+      }
+    },
+    "abort": {
+      "cannot_connect": "The schedule of unionhockey.nl could not be read"
+    }
+  },
+  "selector": {
+    "field_type": {
+      "options": {
+        "water": "Water field",
+        "kunstgras": "Artificial grass (sand or semi-sand)"
+      }
+    }
+  }
+}
